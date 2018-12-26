@@ -1,0 +1,1053 @@
+<script>
+    /* eslint-disable linebreak-style */
+    import {wxa, Page , Utils , Debounce} from '@wxa/core';
+    import config from '../../util/config'
+@Utils
+@Page
+class Form {
+    constructor(){
+        this.data = {
+            formBg:config.formBg,
+            currencyCny:0,
+            calButton:false,
+            proId:'',
+            title:'',
+            submitData:{
+                sex:'0',
+                birth:'',
+                calYears:'',
+                giveMoneyYear:'20',
+                living:1,
+                smoke:'0',
+                proId:'',
+                username:''
+            },
+            insurance_item:{
+                insurance_credit:0,
+                insurance_money:0,
+                change_insurance_credit:0,
+                change_insurance_money:0
+            },
+            items: [
+                {name: '男', value: '0', checked: 'true'},
+                {name: '女', value: '1'},
+            ],
+            money:[
+                {name:'美元' , value:'1' , checked:'true'}
+            ],
+            smoke:[
+                {name:'不吸烟' , value:'0' , checked:'true'},
+                {name:'吸烟' , value:'1'}
+            ],
+            living:[
+                {name:'大陆' , value:1 , checked:'true'},
+                {name:'其他地区' , value:0}
+            ],
+            insurance_years:['10' , '15' , '20' , '25'],
+            current_time:this.forMatTime(Date.parse(new Date()) , 'day'),
+            condition:{
+                showBannerDetail:false,
+                showBg:false
+            },
+        }
+    }
+    forMatTime(inputTime , methods){
+      let date = new Date(inputTime);
+      let y = date.getFullYear();
+      let m = date.getMonth() + 1;
+      m = m < 10 ? ('0' + m) : m;
+      let d = date.getDate();
+      d = d < 10 ? ('0' + d) : d;
+      let h = date.getHours();
+      h = h < 10 ? ('0' + h) : h;
+      let minute = date.getMinutes();
+      let second = date.getSeconds();
+      minute = minute < 10 ? ('0' + minute) : minute;
+      second = second < 10 ? ('0' + second) : second;
+      switch (methods){
+        case 'day':
+          return y + '-' + m + '-' + d;
+          break;
+        case 'seconds':
+          return y + '-' + m + '-' + d + ' ' + h + ':' +minute + ':' + second;
+          break;
+        default:
+          return '参数错误请检查';
+          break;
+      }
+    }
+    onLoad(option) {
+        wx.showLoading({
+            title:'正在加载中...',
+            mask:true
+        })
+        let host = this.app.globalData.httpUrl;
+        let currentTime = new Date();
+        let thirtyYears = currentTime.getFullYear() - 30;
+        let thirtyBirth = thirtyYears + '-01-01';
+        this.setData({
+            ['submitData.birth']: thirtyBirth
+        })
+        this.getCurrentRate();
+        this.clearInsuranceValue();
+        let title = '';
+        this.proId = option.pro;
+        this.app.globalData.proTitle = option.pro;
+        this.setData({
+          proId:option.pro,
+          title:config['proTitle'][this.proId]
+        })
+        this.fetch(host+'/getBanner', {type:1}, {}, 'post')
+            .then((res)=>{
+                if(res.data.code == 0){
+                    this.setData({
+                        formBg:res.data.data
+                    })
+                    wx.hideLoading();
+                }
+            })
+    }
+    //获取汇率
+    getCurrentRate(){
+        let host = this.app.globalData.httpUrl;
+        wx.request({
+            url:host +'/getrate',
+            method:'POST',
+            success:(res) => {
+                this.setData({
+                    currencyCny:parseFloat(res.data.rate).toFixed(2)
+                });
+            }
+        })
+    }
+    closeDiseaseList(){
+        this.setData({
+            condition: {
+                ["showDiseaseList"]:false
+            }
+        })
+    }
+    clearInsuranceValue(){
+        this.setData({
+            ['insurance_item.insurance_money']:0,
+            ['insurance_item.change_insurance_money']:0
+        })
+    }
+    radioSexChange(e){
+        this.setData({
+          ['submitData.sex']:e.detail.value
+        });
+        this.clearInsuranceValue();
+    }
+    radioSmokeChange(e){
+      this.setData({
+        ['submitData.smoke']:e.detail.value
+      });
+      this.clearInsuranceValue();
+    }
+    radioLivingChange(e){
+      this.setData({
+        ['submitData.living']:parseInt(e.detail.value)
+      });
+        this.clearInsuranceValue();
+    }
+    bindAgeChange(e) {
+        let ageArr = e.detail.value.split('-');
+        let currentArr = this.forMatTime(new Date() , 'day').split('-');
+
+        let age = e.detail.value , ageYear = ageArr[0] , ageMonth = ageArr[1] , ageDay = ageArr[2];
+        let nominalAge = 0;
+        //特级携升2的年龄算法
+        if(this.proId == 'EGS'){
+          if(currentArr[1] - ageArr[1] >= 0){
+            nominalAge = currentArr[0] - ageArr[0] + 1
+          }else{
+            nominalAge = currentArr[0] - ageArr[0]
+          }
+        //重疾年龄的算法
+        }else{
+          if(currentArr[1] - ageArr[1] <= 3){
+            nominalAge = currentArr[0] - ageArr[0]
+          }else{
+            nominalAge = currentArr[0] - ageArr[0] + 1
+          }
+          if(nominalAge == 0){
+            nominalAge = 1;
+          }
+        }
+
+      if(nominalAge < 0){
+        wx.showToast({
+          title:'请选择正确的生日日期',
+          icon:'none',
+          mask:'true'
+        })
+      }else{
+        let tmp = [];
+        if(nominalAge <= 50){
+          tmp = ['10' , '15' , '20' , '25']
+        }else if(nominalAge <= 55){
+          tmp = ['10' , '15' , '20']
+        }else if(nominalAge <= 60){
+          tmp = ['10' , '15']
+        }else if(nominalAge <= 65){
+          tmp = ['10']
+        }
+
+        this.setData({
+          ['submitData.birth']:e.detail.value,
+          ['submitData.calYears']:nominalAge,
+          //['submitData.giveMoneyYear']:tmp[0],
+          insurance_years:tmp
+        })
+          this.clearInsuranceValue();
+      }
+    }
+    bindInsuranceYearsChange(e){
+      this.setData({
+        ['submitData.giveMoneyYear']:this.data.insurance_years[e.detail.value]
+      })
+        this.clearInsuranceValue();
+    }
+  createInsurance(e){
+    let ins = this.data.insurance_item;
+    if(ins.insurance_credit == 0 || ins.insurance_money == 0 || ins.change_insurance_credit == 0 ||ins.change_insurance_money == 0){
+      wx.showToast({
+        title:'请先计算保额或保费',
+        icon:'none',
+        mask:'true'
+      })
+    }else{
+      wx.showLoading({
+        title:'正在加载跳转...请稍后',
+        mask:true
+      })
+      let page = '';
+      if(this.data.proId == 'EGS'){
+        page = 'firstPage';
+      }else if(this.data.proId == 'CIE'){
+        page = 'secondPage';
+      }else if(this.data.proId == 'CIM'){
+        page = 'thirdPage';
+      }else if(this.data.proId == 'CIR'){
+        page = 'fourthPage';
+      }
+
+      this.data.submitData.be = this.data.insurance_item.insurance_credit;
+      this.app.globalData.be = this.data.insurance_item.insurance_credit;
+      this.app.globalData.changeBe = this.data.insurance_item.change_insurance_credit;
+      this.data.submitData.bf = this.data.insurance_item.insurance_money;
+      this.app.globalData.changeBf = this.data.insurance_item.change_insurance_money;
+      this.app.globalData.bf = this.data.insurance_item.insurance_money;
+      this.app.globalData.submitData = this.data.submitData;
+
+      //0 页面跳转 1 分享
+      this.router.push('/pages/result/' + page + '?share=0');
+    }
+
+  }
+
+
+    //http请求获取保额费用
+  requestGetInsuranceMoney(event){
+      if(event.detail.value == ''){
+          wx.showToast({
+              title:'请输入正确的保额',
+              icon:'none',
+              mask:'true'
+          })
+      } else if(this.data.submitData.calYears == ''){
+        wx.showToast({
+          title:'请先选择您的出生日期',
+          icon:'none',
+          mask:'true'
+        })
+      }else{
+        let host = this.app.globalData.httpUrl;
+        let port = this.app.globalData.port;
+        this.data.submitData.be = event.detail.value;
+        this.data.insurance_item.insurance_credit = event.detail.value;
+        this.data.submitData.type = 'usd';
+        this.requestAllBfBe('insurance_credit');
+      }
+
+  }
+
+  requestAllBfBe(name){
+      if(this.data.submitData.giveMoneyYear == ''){
+          wx.showToast({
+              title:'请先选择缴费年期',
+              icon:'none',
+              mask:'true'
+          })
+      } else{
+          wx.showLoading({
+              title:'正在努力计算中...',
+              mask:true
+          })
+          let host = this.app.globalData.httpUrl;
+          let port = this.app.globalData.port;
+          if(name == 'insurance_credit'){
+              wx.request({
+                  url:host +'/getCiebf',
+                  data:this.data.submitData,
+                  method:'POST',
+                  success:(res) => {
+                      this.setData({
+                          ['insurance_item.insurance_money']:res.data.data.guranteed||0,
+                          ['insurance_item.change_insurance_credit']:parseFloat(res.data.data.changeBe).toFixed(2) || 0,
+                          ['insurance_item.change_insurance_money']:Math.round(res.data.data.changeBaofei) || 0,
+                      });
+                      wx.hideLoading();
+                      wx.showToast({
+                          title:'若需重新计算请改变投保信息',
+                          icon:'none',
+                          mask:'true'
+                      })
+                  }
+              })
+          }else if(name == 'insurance_money'){
+
+              wx.request({
+                  url:host +'/getCiebe',
+                  data:this.data.submitData,
+                  method:'POST',
+                  success:(res) => {
+                      if(res.data.data.be < 2 || res.data.data.be > 50){
+                          this.setData({
+                              ['insurance_item.insurance_money']: 0,
+                              ['insurance_item.insurance_credit']:0,
+                              ['insurance_item.change_insurance_credit']: 0,
+                              ['insurance_item.change_insurance_money']: 0
+                          });
+                          wx.hideLoading();
+                          wx.showToast({
+                              title:'计算出保额高于50万或者小于2万',
+                              icon:'none',
+                              mask:'true'
+                          })
+                      }else{
+                          this.setData({
+                              ['insurance_item.insurance_money']: res.data.data.insurance_money,
+                              ['insurance_item.insurance_credit']:res.data.data.be,
+                              ['insurance_item.change_insurance_credit']: res.data.data.changeBaoe,
+                              ['insurance_item.change_insurance_money']: res.data.data.changeBaofei
+                          });
+                          wx.hideLoading();
+                          wx.showToast({
+                              title:'若需重新计算请先清空数据',
+                              icon:'none',
+                              mask:'true'
+                          })
+                      }
+                  }
+              })
+          }else if(name == 'change_insurance_credit'){
+
+              wx.request({
+                  url:host + '/getCiebf',
+                  data:this.data.submitData,
+                  method:'POST',
+                  success:(res) => {
+                      this.setData({
+                          ['insurance_item.insurance_money']:res.data.data.guranteed || 0,
+                          ['insurance_item.insurance_credit']:parseFloat(res.data.data.changeBe).toFixed(2) ||0,
+                          ['insurance_item.change_insurance_money']:Math.round(res.data.data.changeBaofei) || 0
+                      });
+                      wx.hideLoading();
+                      wx.showToast({
+                          title:'若需重新计算请先清空数据',
+                          icon:'none',
+                          mask:'true'
+                      })
+                  }
+              })
+          }else if(name == 'change_insurance_money'){
+
+              wx.request({
+                  url:host +'/getCiebe',
+                  data:this.data.submitData,
+                  method:'POST',
+                  success:(res) => {
+                      this.setData({
+                          ['insurance_item.insurance_money']:res.data.data.insurance_money || 0,
+                          ['insurance_item.insurance_credit']:parseFloat(res.data.data.be).toFixed(2) ||0,
+                          ['insurance_item.change_insurance_credit']:parseFloat(res.data.data.changeBaoe).toFixed(2) || 0,
+                          ['insurance_item.change_insurance_money']:Math.round(res.data.data.changeBaofei) || 0
+                      });
+                      wx.hideLoading();
+                      wx.showToast({
+                          title:'若需重新计算请先清空数据',
+                          icon:'none',
+                          mask:'true'
+                      })
+                  }
+              })
+          }
+      }
+  }
+
+  //绑定虚岁
+  setCalYears(event){
+    if(event.detail.value >= 65){
+        wx.showToast({
+            title:'年龄不能大于65岁',
+            mask:true,
+            icon:'none'
+        })
+        this.setData({
+            ['submitData.calYears']:65
+        })
+    }else{
+        this.setData({
+            ['submitData.calYears']:event.detail.value
+        })
+    }
+    let nominalAge = this.data.submitData.calYears;
+    let tmp = [];
+    if(nominalAge <= 50){
+      tmp = ['10' , '15' , '20' , '25']
+    }else if(nominalAge <= 55){
+      tmp = ['10' , '15' , '20']
+    }else if(nominalAge <= 60){
+      tmp = ['10' , '15']
+    }else if(nominalAge <= 65){
+      tmp = ['10']
+    }
+    this.setData({
+      //['submitData.giveMoneyYear']:tmp[0],
+      insurance_years:tmp
+    })
+    this.clearInsuranceValue();
+  }
+
+  requestGetInsuranceCredit(event){
+      if(event.detail.value == ''){
+          wx.showToast({
+              title:'请输入正确的保费',
+              icon:'none',
+              mask:'true'
+          })
+      }
+    else if(this.data.submitData.calYears == ''){
+      wx.showToast({
+        title:'请先选择您的出生日期',
+        icon:'none',
+        mask:'true'
+      })
+    }else{
+      let host = this.app.globalData.httpUrl;
+      let port = this.app.globalData.port;
+
+      this.setData({
+              ['insurance_item.insurance_money']:event.detail.value,
+      });
+
+      this.data.submitData.bf = event.detail.value;
+      this.data.submitData.type = 'usd';
+        this.requestAllBfBe('insurance_money');
+    }
+  }
+
+  //输入人民币计算保费汇率
+  requestGetInsuranceRMBMoney(event){
+      if(event.detail.value == ''){
+          wx.showToast({
+              title:'请输入正确的保额',
+              icon:'none',
+              mask:'true'
+          })
+      }
+    else if(this.data.submitData.calYears == ''){
+      wx.showToast({
+        title:'请先选择您的出生日期',
+        icon:'none',
+        mask:'true'
+      })
+    }else{
+      let host = this.app.globalData.httpUrl;
+      let port = this.app.globalData.port;
+
+      this.data.submitData.be = event.detail.value;
+      this.data.submitData.type = 'rmb';
+      let cnyBaoe = parseFloat(event.detail.value);
+          this.setData({
+              ['insurance_item.change_insurance_credit']:event.detail.value
+          });
+          this.requestAllBfBe('change_insurance_credit');
+
+    }
+  }
+
+  //输入保费人民币算保费
+  requestGetInsuranceRMBCredit(event){
+      if(event.detail.value == ''){
+          wx.showToast({
+              title:'请输入正确的保费',
+              icon:'none',
+              mask:'true'
+          })
+      }
+    else if(this.data.submitData.calYears == ''){
+      wx.showToast({
+        title:'请先选择您的出生日期',
+        icon:'none',
+        mask:'true'
+      })
+    }else{
+      let host = this.app.globalData.httpUrl;
+      let port = this.app.globalData.port;
+
+      this.data.submitData.bf = event.detail.value;
+      this.data.submitData.type = 'rmb';
+
+      this.setData({
+        ['insurance_item.change_insurance_money']:event.detail.value,
+      });
+
+        this.requestAllBfBe('change_insurance_money');
+    }
+  }
+
+  calBf(){
+    if(this.data.submitData.calYears == ''){
+      wx.showToast({
+        title:'请先选择您的出生日期',
+        icon:'none',
+        mask:'true'
+      })
+    }else{
+      let ins = this.data.insurance_item;
+      if(ins.insurance_credit != 0){
+        this.requestAllBfBe('insurance_credit');
+      }else if(ins.insurance_money != 0){
+        this.requestAllBfBe('insurance_money');
+      }else if(ins.change_insurance_credit != 0){
+        this.requestAllBfBe('change_insurance_credit');
+      }else if(ins.change_insurance_money != 0){
+        this.requestAllBfBe('change_insurance_money');
+      }else if(ins.insurance_credit == 0 || ins.insurance_money == 0 || ins.change_insurance_credit == 0 ||ins.change_insurance_money == 0){
+        wx.showToast({
+          title:'请填写保额或保费',
+          icon:'none',
+          mask:'true'
+        })
+        return ;
+      }
+      this.setData({
+        calButton:true
+      })
+
+      wx.showLoading({
+        title:'正在加载中...',
+        mask:true
+      })
+    }
+  }
+
+  resetAll(){
+      this.setData({
+        insurance_item:{
+          insurance_credit:0,
+          insurance_money:0,
+          change_insurance_credit:0,
+          change_insurance_money:0
+        },
+        calButton:false
+      })
+  }
+
+    clearInputValue(e){
+        let kinds = e.target.dataset.type;
+
+    }
+
+    limitNumber(e){
+        let digitNum = e.detail.value.split('.')[1] || false;
+        let kinds = e.target.dataset.type;
+        if(digitNum.length > 2){
+            wx.showToast({
+                title:'只能填两位小数点',
+                icon:'none',
+                mask:true
+            })
+            switch (kinds){
+                case 'baoe':
+                    return this.data.insurance_item.insurance_credit;
+                case 'changeBaoe':
+                    return this.data.insurance_item.change_insurance_credit;
+                case 'baof':
+                    return this.data.insurance_item.insurance_money;
+                case 'changebaof':
+                    return this.data.insurance_item.change_insurance_money;
+            }
+        }else{
+            let baoeValue = parseFloat(e.detail.value);
+            switch (kinds){
+                case 'baoe':
+
+                    this.limitBaoeCount(baoeValue);
+                    this.setData({
+                        ['insurance_item.insurance_credit'] : e.detail.value
+                    });
+                    return this.data.insurance_item.insurance_credit;
+                case 'changeBaoe':
+                    this.limitCNYBaoeCount(baoeValue);
+                    this.setData({
+                        ['insurance_item.change_insurance_credit'] : e.detail.value
+                    });
+                    return this.data.insurance_item.change_insurance_credit;
+                case 'baof':
+                    this.setData({
+                        ['insurance_item.insurance_money'] : e.detail.value
+                    });
+                    return this.data.insurance_item.insurance_money;
+                case 'changebaof':
+                    this.setData({
+                        ['insurance_item.change_insurance_money'] : e.detail.value
+                    });
+                    return this.data.insurance_item.change_insurance_money;
+            }
+        }
+    }
+
+    @Debounce(500)
+    limitBaoeCount(baoeValue){
+        if(baoeValue > 50){
+            wx.showToast({
+                title:'超出50万美元',
+                icon:'none',
+                mask:true
+            })
+            this.setData({
+                ['insurance_item.insurance_credit'] : 50
+            });
+        }else if(baoeValue < 2){
+            wx.showToast({
+                title:'小于两万美元',
+                icon:'none',
+                mask:true
+            })
+            this.setData({
+                ['insurance_item.insurance_credit'] : 2
+            });
+        }else{
+            this.setData({
+                ['insurance_item.insurance_credit'] : baoeValue
+            });
+        }
+    }
+
+    @Debounce(500)
+    limitCNYBaoeCount(baoeValue){
+        if(baoeValue > parseFloat(this.data.currencyCny * 50).toFixed(2)){
+            wx.showToast({
+                title:'超出'+parseFloat(this.data.currencyCny * 50).toFixed(2)+'人民币范围',
+                icon:'none',
+                mask:'true'
+            })
+            this.setData({
+                ['submitData.be']:parseFloat(this.data.currencyCny * 50).toFixed(2),
+                ['insurance_item.change_insurance_credit']:parseFloat(this.data.currencyCny * 50).toFixed(2)
+            });
+        }else if(baoeValue < parseFloat(this.data.currencyCny * 2).toFixed(2)){
+            wx.showToast({
+                title:'小于'+parseFloat(this.data.currencyCny * 2).toFixed(2)+'人民币范围',
+                icon:'none',
+                mask:'true'
+            })
+
+            this.setData({
+                ['submitData.be']:parseFloat(this.data.currencyCny * 2).toFixed(2),
+                ['insurance_item.change_insurance_credit']:parseFloat(this.data.currencyCny * 2).toFixed(2)
+            });
+        }
+    }
+
+
+    setUsername(e){
+        this.setData({
+            ['submitData.username']:e.detail.value
+        })
+    }
+
+    showDetailBanner(e){
+        let banner = e.currentTarget.dataset.banner;
+        let detailImg = e.currentTarget.dataset.detail;
+        if(detailImg){
+            this.setData({
+                ['condition.showBannerDetail']:true,
+                bannerDetail:banner,
+                ['condition.showBg']:true
+            })
+        }
+    }
+
+    redirectWebView(e){
+        let redirectUrl = e.currentTarget.dataset.url;
+        if(redirectUrl){
+            this.router.replace('/pages/change/noticeRedirect?url=' + redirectUrl);
+        }
+    }
+
+    goToBanner(){
+        let url = 'https://51bx.club/20181213.html';
+        this.router.push('/pages/change/bannerRouter?url=' + url);
+    }
+
+}
+
+wxa.launchPage(Form);
+</script>
+<config>
+{
+    "navigationBarTitleText": "A+计划书输入客户信"
+}
+</config>
+<template>
+<view class="form">
+    <view class="bg-wall"  wx:if="{{condition.showBg}}">
+
+    </view>
+
+    <div class="disease" wx:if="{{condition.showBannerDetail}}">
+        <view style="padding: 20rpx 0 20rpx 0;text-align: center;">
+            {{bannerDetail.title}}
+            <image style="width: 35rpx;height: 35rpx;float: right;position: relative;left:-23rpx;" src="../../img/close.png" bindtap="closeDiseaseList"></image>
+        </view>
+        <view style="height: 1px;background-color: lightgray;">
+
+        </view>
+        <view class="content" style="border-bottom: 1px solid lightgrey;">
+            <image class="detail-banner" src="{{bannerDetail.pic_detail}}"></image>
+        </view>
+
+        <view class="content" style="text-align: center;">
+            <text data-url="{{bannerDetail.link_src}}" bindtap="redirectWebView">详情请见: {{bannerDetail.link_src}}</text>
+        </view>
+    </div>
+
+    <view class="header">
+        <swiper style="height: 244rpx;" indicator-dots="{{indicatorDots}}"
+                autoplay="{{autoplay}}" interval="{{interval}}" duration="{{duration}}" circular="{{circular}}" vertical="{{false}}"
+        >
+            <block wx:for="{{formBg}}" wx:key="{{item.id}}">
+                <swiper-item>
+                    <image style="width: 100%;height: 244rpx;" src="{{item.pic_src}}" bindtap="showDetailBanner" data-banner="{{item}}" data-detail="{{item.pic_detail}}"></image>
+                </swiper-item>
+            </block>
+        </swiper>
+    </view>
+
+    <view class="container-content">
+        <view class="form-header">
+            {{title}}
+        </view>
+        <view class="form-content">
+            <form>
+                <view style="padding: 20rpx 0 20rpx 20rpx;font-weight: bold;">受保人信息</view>
+                <view class="form-sex">
+                    <label style="position: relative;top: 7rpx;">姓名</label>
+                    <view style="margin-left: 60rpx;position: relative;top: -6rpx;display: flex;">
+                        <!--submitData.calYears-->
+                        <input type="text" value="{{submitData.username}}" bindblur="setUsername" style="border-bottom:1px solid black;width: 490rpx;text-align: center;" placeholder="请输入您的姓名" />
+                    </view>
+                </view>
+                <view class="form-sex">
+                    <label style="position: relative;top: 7rpx;">性别</label>
+                    <radio-group class="radio-group" bindchange="radioSexChange">
+                        <label style="margin-left: 150rpx;" class="radio" wx:key="*" wx:for="{{items}}">
+                            <radio color="#EF7402" value="{{item.value}}" checked="{{item.checked}}"/>{{item.name}}
+                        </label>
+                    </radio-group>
+                </view>
+                <view class="form-age">
+                    <label style="padding: 20rpx 0 20rpx 20rpx;">生日</label>
+                    <picker style="margin-left: 150rpx;width: 41%;" mode="date" value="{{submitData.birth}}" start="1950-01-01" end="{{current_time}}" bindchange="bindAgeChange">
+                        <view style="position: relative;top: 20rpx;" class="picker">
+                            {{submitData.birth || '请选择您的生日' }}
+                        </view>
+                        <view>
+                            <image class="date-btn" src="../../img/date_button.png"></image>
+                        </view>
+                    </picker>
+                </view>
+
+                <view class="form-calculate-age">
+                    <label style="padding: 20rpx 0 20rpx 20rpx;">年龄</label>
+                    <view style="margin-left: 60rpx;position: relative;top: 12rpx;display: flex;">
+                        <!--submitData.calYears-->
+                        <input type="number" value="{{submitData.calYears}}" bindblur="setCalYears" bindconfirm="setCalYears" style="border-bottom:1px solid black;width: 380rpx;text-align: center;" placeholder="请选择出生日期或输入年龄" />
+                        <span style="position: relative;top: 4rpx;">岁(虚岁)</span>
+                    </view>
+                </view>
+            </form>
+        </view>
+
+        <view class="form-content">
+            <form>
+                <view style="padding: 20rpx 0 20rpx 20rpx;font-weight: bold;">投保信息</view>
+                <view class="form-sex">
+                    <label style="position: relative;top: 7rpx;">货币</label>
+                    <radio-group class="radio-group" bindchange="radioChange">
+                        <label style="margin-left: 160rpx;" class="radio" wx:key="*" wx:for="{{money}}">
+                            <radio color="#EF7402" value="{{item.name}}" checked="{{item.checked}}"/>{{item.name}}
+                        </label>
+                    </radio-group>
+                </view>
+                <view class="form-age">
+                    <label style="padding: 20rpx 0 20rpx 20rpx;">是否吸烟</label>
+                    <radio-group style="padding-top: 16rpx;" class="radio-group" bindchange="radioSmokeChange">
+                        <label style="margin-left: 102rpx;" class="radio" wx:key="*" wx:for="{{smoke}}">
+                            <radio color="#EF7402" value="{{item.value}}" checked="{{item.checked}}"/>{{item.name}}
+                        </label>
+                    </radio-group>
+                </view>
+
+                <view class="form-age">
+                    <label style="padding: 20rpx 0 20rpx 20rpx;">居住地区</label>
+                    <radio-group style="padding-top: 16rpx;" class="radio-group" bindchange="radioLivingChange">
+                        <label style="margin-left: 102rpx;" class="radio" wx:key="*" wx:for="{{living}}">
+                            <radio color="#EF7402" value="{{item.value}}" checked="{{item.checked}}"/>{{item.name}}
+                        </label>
+                    </radio-group>
+                </view>
+
+                <view class="form-calculate-age">
+                    <label style="padding: 20rpx 0 20rpx 20rpx;">缴费年期</label>
+                    <view style="position: relative;top: 20rpx;width: 78%;">
+                        <picker style="text-align: center;" mode="selector" bindchange="bindInsuranceYearsChange" value="{{index}}" range="{{insurance_years}}">
+                            <view class="picker">
+                                {{submitData.giveMoneyYear == ""? "请选择":submitData.giveMoneyYear}} {{submitData.giveMoneyYear != ""?"年":""}}
+                                <span style="float: right;position: relative;top: 3rpx;">
+                                    <image src="../../img/next.png" style="width: 30rpx;height: 30rpx;"></image>
+                                </span>
+                            </view>
+                        </picker>
+                    </view>
+                </view>
+
+                <!--<view style="text-align: center;display: block;padding-bottom: 20rpx;" class="form-calculate-age">-->
+                    <!--<view>-->
+                        <!--<view>-->
+                            <!--<button size="mini" type="primary" bindtap="calBf" disabled="{{calButton}}" style="margin-right: 50rpx;">-->
+                                <!--计算保费-->
+                            <!--</button>-->
+
+                            <!--<button size="mini" type="primary" bindtap="resetAll">-->
+                                <!--清空-->
+                            <!--</button>-->
+                        <!--</view>-->
+                    <!--</view>-->
+
+                <!--</view>-->
+
+            </form>
+        </view>
+        <view class="form-content">
+            <form>
+                <view style="padding: 20rpx 0 20rpx 20rpx;font-weight: bold;">保费测算</view>
+
+                <view style="padding-left: 20rpx;font-weight: bold">
+                    今日汇率 1(美元) : {{currencyCny}}(人民币)
+                </view>
+
+                <view class="form-calculate-age">
+                    <label style="padding: 20rpx 0 20rpx 20rpx;">保额</label>
+                    <view style="margin-left: 40rpx;position: relative;top: 8rpx;display: flex;flex-direction:row;">
+                        <view>
+                            <input bindinput="limitNumber" bindfocus="clearInputValue" data-type="baoe" value="{{insurance_item.insurance_credit}}" type="digit" bindblur="requestGetInsuranceMoney" bindconfirm="requestGetInsuranceMoney" style="border-bottom:1px solid black;width: 80rpx;position: relative;top: 4rpx;" placeholder="" />
+                        </view>
+                        <view style="position: relative;top: 10rpx;">
+                            万元（美元）
+                        </view>
+                        <view style="margin-left: 40rpx;">
+                            <input bindinput="limitNumber" bindfocus="clearInputValue" data-type="changeBaoe" value="{{insurance_item.change_insurance_credit}}" type="digit" style="border-bottom:1px solid black;width: 104rpx;position: relative;top: 4rpx;" placeholder="" bindblur="requestGetInsuranceRMBMoney" bindconfirm="requestGetInsuranceRMBMoney" />
+                        </view>
+                        <view style="position: relative;top: 10rpx;">
+                            万元（人民币）
+                        </view>
+                    </view>
+                </view>
+                
+                <view style="font-size: 12px;color: #909399;margin: 15rpx 0 15rpx 0;padding-left: 10px;">
+                    保额不能低于2万美元，最高不超过50万美元
+                </view>
+
+                <view class="form-calculate-age">
+                    <label style="padding: 20rpx 0 20rpx 20rpx;">保费</label>
+                    <view style="margin-left: 40rpx;position: relative;top: 8rpx;display: flex;flex-direction:row;">
+                        <view>
+                            <input bindinput="limitNumber" bindfocus="clearInputValue" data-type="baof" type="digit" value="{{insurance_item.insurance_money}}" bindblur="requestGetInsuranceCredit" bindconfirm="requestGetInsuranceCredit" value="{{insurance_item.insurance_money}}" style="border-bottom:1px solid black;width: 120rpx" placeholder="" />
+                        </view>
+                        <view style="position: relative;top: 10rpx;">
+                            （美元）
+                        </view>
+                        <view style="margin-left: 40rpx;">
+                            <input bindinput="limitNumber" bindfocus="clearInputValue" data-type="changebaof" value="{{insurance_item.change_insurance_money}}" type="digit" bindblur="requestGetInsuranceRMBCredit" bindconfirm="requestGetInsuranceRMBCredit" style="border-bottom:1px solid black;width: 120rpx" placeholder="" />
+                        </view>
+                        <view style="position: relative;top: 10rpx;">
+                            （人民币）
+                        </view>
+                    </view>
+
+                </view>
+
+                <view style="font-size: 12px;color: #909399;margin: 15rpx 0 30rpx 0;padding-left: 10px;padding-bottom: 10px;">
+                    保额或保费只需要输入一个数值，系统自动计算其他数值，汇率按当天计算
+                </view>
+
+                <!--<view style="text-align: center;display: block;padding-bottom: 20rpx;" class="form-calculate-age">-->
+                <!--<view>-->
+                <!--<view>-->
+                <!--<button size="mini" type="primary" bindtap="calBf" disabled="{{calButton}}" style="margin-right: 50rpx;">-->
+                <!--计算保费-->
+                <!--</button>-->
+
+                <!--<button size="mini" type="primary" bindtap="resetAll">-->
+                <!--清空-->
+                <!--</button>-->
+                <!--</view>-->
+                <!--</view>-->
+
+                <!--</view>-->
+
+            </form>
+        </view>
+
+        <view style="width: 95%;margin: 0 auto;color: white;">
+            <button bindtap="createInsurance" class="submit-btn" >创建计划书</button>
+        </view>
+    </view>
+</view>
+
+    <view class="ad" bindtap="goToBanner">
+        <image class="adv-img" src="../../img/ad1.jpg" mode="widthFix"></image>
+    </view>
+</template>
+<style lang="scss">
+    .ad{
+        .adv-img{
+            width: 100%;
+        }
+    }
+.form {
+    width: 100%;
+    height: auto;
+    font-family: "微软雅黑";
+    font-size: 14px;
+    background-color: rgb(142,143,147);
+    padding-bottom: 20rpx;
+}
+.bg-wall{
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    top: 0;
+    background-color: rgba(0,0,0,0.6);
+    z-index: 100;
+}
+.header{
+    width: 100%;
+    text-align: center;
+    padding: 0 0 5rpx 0;
+    color: white;
+}
+.banner-header{
+    width: 100%;
+}
+.banner-header image {
+    width: 100%;
+}
+.index-header{
+    padding:15rpx;
+    margin-top:-5rpx;
+    background-color: white;
+}
+.container-content{
+    width: 100%;
+}
+.productor-intro{
+    display: flex;
+    flex-direction: row;
+    margin-top: 25rpx;
+}
+.productor-intro-words{
+    width:340rpx;
+    margin-left:27rpx;
+    color: rgb(189 , 189 , 189);
+}
+.productor-intro-words-header{
+    font-size: 15px;
+    color: black;
+    font-weight: bold;
+}
+.productor-intro-words-add-image{
+    width:30px;
+    height:30px;
+    float:right;
+    position:relative;
+    top:38rpx;
+    left:22rpx;
+}
+.form-header{
+    padding: 20rpx 0 20rpx 20rpx;
+    border-radius: 8rpx;
+    background-color: white;
+    color: black;
+    width: 95%;
+    margin: 0 auto;
+    font-size: 15px;
+}
+.form-content{
+    width: 98%;
+    margin: 20rpx auto;
+    background-color: white;
+    border-radius: 8rpx;
+}
+.form-sex{
+    padding: 20rpx 0 20rpx 0;
+    display:flex;
+    flex-direction: row;
+    margin-left: 20rpx;
+}
+.form-age{
+    padding: 20rpx 0 20rpx 0;
+    display:flex;
+    flex-direction: row;
+}
+.form-calculate-age{
+    display:flex;
+    flex-direction: row;
+}
+.radio-group{
+
+}
+.date-btn{
+    position: relative;
+    top: -32rpx;
+    width: 30px;
+    height: 30px;
+    float: right;
+}
+.submit-btn{
+    background-color: #0BC09F;
+    color: rgb(237,255,237);
+}
+.disease{
+    position:fixed;
+    top:60rpx;
+    z-index:101;
+    background-color:white;
+    width:94%;
+    left:24rpx;
+    border-radius: 8px;
+    .content{
+        padding: 20rpx;
+    }
+}
+.detail-banner{
+    width: 100%;
+    height: 70vh;
+}
+</style>

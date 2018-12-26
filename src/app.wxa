@@ -1,0 +1,44 @@
+<script>
+import {wxa, App} from '@wxa/core';
+
+@App
+class Main {
+    constructor() {
+        this.globalData = {
+          httpUrl:'https://51bx.club',
+          port:80
+        }
+    }
+}
+
+wxa.launchApp(Main);
+</script>
+<config>
+{
+    "pages": [
+        "pages/index",
+        "pages/form/form",
+        "pages/result/firstPage",
+        "pages/result/secondPage",
+        "pages/result/thirdPage",
+        "pages/result/fourthPage",
+        "pages/change/change",
+        "pages/form/cirForm",
+        "pages/form/cimForm",
+        "pages/form/egsForm",
+        "pages/feedback/index",
+        "pages/change/noticeRedirect",
+        "pages/change/bannerRouter"
+    ],
+    "window": {
+        "navigationBarTitleText": "A+计划书"
+    }
+}
+</config>
+<style lang="scss">
+    @import 'style/weui.wxss';
+page {
+    width: 100%;
+    height: 100%;
+}
+</style>
